@@ -17,30 +17,57 @@ func main() {
 
 	ctx := context.Background()
 
-	// List exchange rates
-	rates, err := client.Rates.List(ctx, yellowcard.RatesParams{From: "USD"})
+	// List exchange rates for USD
+	rates, err := client.Rates.List(ctx, "USD")
 	if err != nil {
 		log.Fatal(err)
 	}
 	for _, r := range rates {
-		fmt.Printf("%s → %s: %.4f\n", r.From, r.To, r.Rate)
+		fmt.Printf("%s: buy=%.4f sell=%.4f\n", r.Code, r.Buy, r.Sell)
 	}
 
-	// Create a payment
-	payment, err := client.Payments.Create(ctx, yellowcard.CreatePaymentRequest{
-		SequenceID: "order-12345",
-		Amount:     100,
-		Currency:   "USD",
-		ChannelID:  "channel-id",
-		Destination: yellowcard.Destination{
-			AccountName:   "Jane Doe",
-			AccountNumber: "0241234567",
-			Country:       "GH",
+	// List payment channels for Ghana
+	channels, err := client.Networks.Channels(ctx, "GH")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, ch := range channels {
+		fmt.Printf("channel: %s — %s (%s)\n", ch.Name, ch.Type, ch.Currency)
+	}
+
+	// Create a receive payment
+	payment, err := client.Payments.Create(ctx, yellowcard.ReceivePaymentRequest{
+		SequenceId:   "order-12345",
+		Amount:       100,
+		Currency:     "USD",
+		Country:      "GH",
+		ChannelId:    "channel-id",
+		CustomerType: yellowcard.Retail,
+		Reason:       "salary",
+		Recipient: yellowcard.Recipient{
+			Name:  "Jane Doe",
+			Phone: "0241234567",
+			Email: "jane@example.com",
 		},
-		Reason: "salary",
+		Source: yellowcard.Source{
+			AccountNumber: "0241234567",
+			NetworkId:     "network-id",
+		},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Payment %s status: %s\n", payment.ID, payment.Status)
+	fmt.Printf("Payment %s status: %s\n", payment.Id, payment.Status)
+
+	// List payments with filters
+	payments, err := client.Payments.List(ctx, yellowcard.ReceiveQuery{
+		PerPage: 10,
+		OrderBy: yellowcard.Desc,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, p := range payments {
+		fmt.Printf("%s: %s %d %s\n", p.Id, p.Status, p.Amount, p.Currency)
+	}
 }

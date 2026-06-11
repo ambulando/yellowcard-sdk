@@ -28,28 +28,26 @@ client := yellowcard.New("your-api-key", "your-secret-key", yellowcard.WithSandb
 
 ### Rates
 
-Look up exchange rates between currency pairs.
+Look up exchange rates for a given currency.
 
 ```go
 ctx := context.Background()
 
-// All rates, optionally filtered
-rates, err := client.Rates.List(ctx, yellowcard.RatesParams{From: "USD"})
-
-// Single pair
-rate, err := client.Rates.Get(ctx, "USD", "GHS")
-fmt.Printf("1 USD = %.4f GHS (expires %s)\n", rate.Rate, rate.ExpiresAt)
+rates, err := client.Rates.List(ctx, "USD")
+for _, r := range rates {
+    fmt.Printf("%s: buy=%.4f sell=%.4f\n", r.Code, r.Buy, r.Sell)
+}
 ```
 
 ### Networks and channels
 
-Discover supported blockchain networks and payment channels (mobile money, bank transfer, etc.).
+Discover supported networks and payment channels (mobile money, bank transfer, etc.), optionally filtered by ISO country code.
 
 ```go
 // Supported networks
-networks, err := client.Networks.List(ctx)
+networks, err := client.Networks.List(ctx, "GH")
 
-// Payment channels, optionally filtered by ISO country code
+// Payment channels
 channels, err := client.Networks.Channels(ctx, "GH")
 for _, ch := range channels {
     fmt.Printf("%s — %s (%s)\n", ch.Name, ch.Type, ch.Currency)
@@ -59,38 +57,52 @@ for _, ch := range channels {
 ### Payments
 
 ```go
-// Create a payment
-payment, err := client.Payments.Create(ctx, yellowcard.CreatePaymentRequest{
-    SequenceID: "order-12345",   // idempotency key you assign
-    Amount:     100,
-    Currency:   "USD",
-    ChannelID:  "channel-id",
-    Destination: yellowcard.Destination{
-        AccountName:   "Jane Doe",
-        AccountNumber: "0241234567",
-        Country:       "GH",
+// Create a receive payment
+payment, err := client.Payments.Create(ctx, yellowcard.ReceivePaymentRequest{
+    SequenceId:   "order-12345", // idempotency key you assign
+    Amount:       100,
+    Currency:     "USD",
+    Country:      "GH",
+    ChannelId:    "channel-id",
+    CustomerType: yellowcard.Retail,
+    Reason:       "salary",
+    Recipient: yellowcard.Recipient{
+        Name:  "Jane Doe",
+        Phone: "0241234567",
+        Email: "jane@example.com",
     },
-    Reason: "salary",
+    Source: yellowcard.Source{
+        AccountNumber: "0241234567",
+        NetworkId:     "network-id",
+    },
 })
 
-// Fetch by API-assigned ID
-payment, err = client.Payments.Get(ctx, payment.ID)
+// Fetch by ID
+payment, err = client.Payments.Get(ctx, payment.Id)
 
 // Fetch by your own sequence ID
 payment, err = client.Payments.GetBySequenceID(ctx, "order-12345")
 
-// Cancel a pending payment
-err = client.Payments.Cancel(ctx, payment.ID)
-```
+// List with filters
+payments, err := client.Payments.List(ctx, yellowcard.ReceiveQuery{
+    PerPage: 20,
+    OrderBy: yellowcard.Desc,
+    SortBy:  yellowcard.CreatedAt,
+})
 
-Payment lifecycle statuses: `pending` → `processing` → `completed` / `failed` / `expired`.
+// Lifecycle actions
+payment, err = client.Payments.Accept(ctx, payment.Id)
+payment, err = client.Payments.Deny(ctx, payment.Id)
+payment, err = client.Payments.Cancel(ctx, payment.Id)
+payment, err = client.Payments.Refund(ctx, payment.Id)
+```
 
 ### Accounts
 
 ```go
 accounts, err := client.Accounts.List(ctx)
 for _, a := range accounts {
-    fmt.Printf("%s: %.2f %s (%s)\n", a.Label, a.Balance, a.Currency, a.Status)
+    fmt.Printf("%s: %.2f %s\n", a.CurrencyType, a.Available, a.Currency)
 }
 ```
 
@@ -107,7 +119,6 @@ if err != nil {
     if yellowcard.IsUnauthorized(err) {
         // 401 — check your API key and secret
     }
-    // full error detail
     log.Fatal(err)
 }
 ```
@@ -121,16 +132,13 @@ if err != nil {
 | `WithHTTPClient(hc)` | Supply a custom `*http.Client` (timeouts, tracing, etc.) |
 
 ```go
-import "net/http"
-import "time"
-
 hc := &http.Client{Timeout: 10 * time.Second}
 client := yellowcard.New(apiKey, secretKey, yellowcard.WithHTTPClient(hc))
 ```
 
 ## Authentication
 
-The client handles authentication automatically. Each request is signed with HMAC-SHA256 over `timestamp + method + path + body` and sent via the `YC-API-Key`, `YC-Signature`, and `YC-Timestamp` headers. You only need to supply your API key and secret to `New()`.
+The client handles authentication automatically. Each request is signed with HMAC-SHA256 and sent via the `X-YC-Timestamp` and `Authorization` headers. You only need to supply your API key and secret to `New()`.
 
 ## Running the example
 

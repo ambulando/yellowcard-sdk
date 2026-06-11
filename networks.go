@@ -1,20 +1,25 @@
 package yellowcard
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // NetworksService handles supported blockchain networks and payment channels.
 type NetworksService struct{ client *httpClient }
 
 // Network represents a supported blockchain network or payment channel.
 type Network struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	Status     string   `json:"status"`
-	Countries  []string `json:"countries"`
-	MinAmount  float64  `json:"minAmount"`
-	MaxAmount  float64  `json:"maxAmount"`
-	FeePercent float64  `json:"feePercent"`
-	FeeFixed   float64  `json:"feeFixed"`
+	Id                       string    `json:"id"`
+	Code                     string    `json:"code"`
+	UpdatedAt                time.Time `json:"updatedAt"`
+	Status                   string    `json:"status"`
+	CreatedAt                time.Time `json:"createdAt"`
+	AccountNumberType        string    `json:"accountNumberType"`
+	Country                  string    `json:"country"`
+	Name                     string    `json:"name"`
+	ChannelIds               []string  `json:"channelIds"`
+	CountryAccountNumberType string    `json:"countryAccountNumberType"`
 }
 
 // Channel represents a payment channel (mobile money, bank transfer, etc.).
@@ -28,19 +33,22 @@ type Channel struct {
 }
 
 // List returns all supported networks.
-func (s *NetworksService) List(ctx context.Context) ([]Network, error) {
-	var resp struct {
-		Networks []Network `json:"networks"`
+// https://sandbox.api.yellowcard.io/business/networks
+func (s *NetworksService) List(ctx context.Context, country string) ([]Network, error) {
+	var resp []Network
+	path := "/business/networks"
+	if country != "" {
+		path += "?country=" + country
 	}
-	if err := s.client.get(ctx, "/v2/networks", &resp); err != nil {
+	if err := s.client.get(ctx, path, &resp); err != nil {
 		return nil, err
 	}
-	return resp.Networks, nil
+	return resp, nil
 }
 
 // Channels returns all supported payment channels, optionally filtered by country code.
 func (s *NetworksService) Channels(ctx context.Context, country string) ([]Channel, error) {
-	path := "/v2/channels"
+	path := "/business/channels"
 	if country != "" {
 		path += "?country=" + country
 	}

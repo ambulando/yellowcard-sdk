@@ -3,27 +3,33 @@ package yellowcard
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 )
 
 // sign produces the HMAC-SHA256 signature expected by the YellowCard API.
 // Signature covers: timestamp + HTTP method + path + raw request body.
-func sign(secretKey, method, path, body string, ts time.Time) string {
-	timestamp := strconv.FormatInt(ts.UnixMilli(), 10)
-	payload := timestamp + method + path + body
-	mac := hmac.New(sha256.New, []byte(secretKey))
-	mac.Write([]byte(payload))
-	return hex.EncodeToString(mac.Sum(nil))
+func sign(secretKey, method, path, date string, body interface{}) string {
+	h := hmac.New(sha256.New, []byte(secretKey))
+	h.Write([]byte(date))
+	h.Write([]byte(path))
+	h.Write([]byte(method))
+	if body != nil {
+		bodyJSON, _ := json.Marshal(body)
+		bodyHmac := sha256.Sum256(bodyJSON)
+		bodyBase64 := base64.StdEncoding.EncodeToString(bodyHmac[:])
+		h.Write([]byte(bodyBase64[:]))
+	}
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
 func authHeaders(apiKey, secretKey, method, path, body string) map[string]string {
-	ts := time.Now()
+	date := time.Now().UTC().Format(time.RFC3339)
+	signature := sign(secretKey, method, path, date, body)
 	return map[string]string{
-		"YC-API-Key":   apiKey,
-		"YC-Signature": sign(secretKey, method, path, body, ts),
-		"YC-Timestamp": fmt.Sprintf("%d", ts.UnixMilli()),
+		"X-YC-Timestamp": date,
+		"Authorization":  fmt.Sprintf("YcHmacV1 %s:%s", apiKey, signature),
 	}
 }
